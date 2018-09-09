@@ -1,0 +1,156 @@
+Serviços Web Rest e Addressability
+
+Addressability --> A capacidade de endereçamento é a capacidade de um dispositivo digital de responder 
+individualmente a uma mensagem enviada para muitos dispositivos semelhantes. 
+Exemplos incluem pagers, telefones celulares e set-top boxes para TV paga. Wikipedia (inglês)
+
+
+API Rest gratuíta que fornece métodos para testar seu cliente
+https://jsonplaceholder.typicode.com/
+
+
+Capítulo 2 - Testando requisições com o Fiddler - Ferramenta para ajudar nos testes de URL e verificar retornos devolvidos pelo serviço
+
+Podemos enviar XML ou JSON, é só especificar o que estamos enviando através do cabeçalho Content-type.
+
+Para forçar um determinado tipo de retorno no fiddle ou qualquer outro cliente que fará chamada ao serviço, use a tag
+--------------------------POSTMAN E OUTROS--------------------------
+Accept: application/xml --> PARA XML
+OU
+Accept: application/json --> PARA JSON
+--------------------------------------------------------------------
+
+-------------------------------FIDDLE-------------------------------
+Content-Type: application/xml
+OU 
+Content-Type: application/json
+--------------------------------------------------------------------
+
+Enquanto não configurarmos o tipo padrão de saída da resposta do serviço, é enviado via CamelCase (UpperCamelCase padrão do c#), caso seja necessário retornar o padrão CamelCase (lowerCamelCase padrão javascript) é necessário fazer configuração no arquivo de WebApiConfig.cs
+
+Para configurar a saída e entrada no padrão de (lowerCamelCase padrão javascript, precisamos incluir as linhas 
+
+//configura o padrão para a serialização das classes do projeto
+config.Formatters.JsonFormatter.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
+
+//Configura para desconsiderar os data annotation nas classes quando existir alguma configurada 
+config.Formatters.JsonFormatter.UseDataContractJsonSerializer = false;
+
+*****************FromBody*****************
+Para que serve a anotação FromBody?
+
+Para especificarmos que um parâmetro virá no corpo da requisição
+
+A anotação FromBody serve para especificarmos que um parâmetro virá no corpo da requisição. Usando essa anotação, nosso método ficará assim:
+
+public string Post([FromBody]Carrinho carrinho)
+{
+    CarrinhoDAO dao = new CarrinhoDAO();
+    dao.Adiciona(carrinho);
+    return "sucesso";
+}
+
+
+**********************************Códigos de status HTTP**********************************
+CÓDIGO	STATUS										TIPO						ONDE É USADO
+100		Continuar									Informativo
+101		Protocolo de Comutação						Informativo
+102		Processing									Informativo
+-------------------------------------------------------------------------------------
+200		OK											Sucesso						RESPOSTA DE UM (GET) COM SUCESSO
+201		Criado										Sucesso 					RESPOSTA DE UM (POST) COM SUCESSO
+202		Aceito										Sucesso
+203		Informação não autorizável					Sucesso
+204		Sem conteúdo								Sucesso
+205		Reconfigurar conteúdo						Sucesso
+206		Conteúdo parcial							Sucesso
+-------------------------------------------------------------------------------------
+300		Múltipla escolha							Redirecionado
+301		Movido permanentemente						Redirecionado
+302		Movido temporariamente						Redirecionado
+303		Consultar outro local						Redirecionado
+304		Não modificado								Redirecionado
+305		Utilizar Proxy								Redirecionado
+307		Redirecionamento temporário					Redirecionado
+-------------------------------------------------------------------------------------
+400		Solicitação inválida						Erro de solicitação
+401		Não autorizado								Erro de solicitação
+403		Proibido									Erro de solicitação
+404		Não encontrado								Erro de solicitação			RESPOSTA DE UM (GET) QUANDO NAO ENCONTRADO REGISTRO
+405		Método não permitido						Erro de solicitação
+406		Não aceitável								Erro de solicitação
+407		Autorização de proxy necessária				Erro de solicitação
+408		Tempo limite de solicitação					Erro de solicitação
+409		Conflito									Erro de solicitação
+410		Desaparecido								Erro de solicitação
+411		Comprimento necessário						Erro de solicitação
+412		Falha na pré-condição						Erro de solicitação
+413		Entidade de solicitação muito grande		Erro de solicitação
+414		A URL solicitado é muito longa				Erro de solicitação
+415		Tipo de mídia incompatível					Erro de solicitação			NÃO INFORMADO O (Accept: application/xml | Accept: application/json OU Content-Type: application/xml | Content-Type: application/json) NO MOMENTO DO POST/PUT
+416		Faixa solicitada insatisfatória				Erro de solicitação
+417		Falha na expectativa						Erro de solicitação
+-------------------------------------------------------------------------------------
+500		Internal Server Error						Erro no servidor
+501		Not Implemented								Erro no servidor
+502		Bad Gateway									Erro no servidor
+503		Service Unavailable							Erro no servidor
+504		Gateway Timeout								Erro no servidor
+504		Versão HTTP incompatível					Erro no servidor
+-------------------------------------------------------------------------------------
+
+--------------UTILIZANDO RETORNO RESTFULL - AJUSTANDO CÓDIGOS DE RETORNO--------------
+public HttpResponseMessage post([FromBody]Carrinho carrinho)
+{
+	try
+	{
+		CarrinhoDAO dao = new CarrinhoDAO();
+		dao.Adiciona(carrinho);
+		HttpResponseMessage response = Request.CreateResponse(HttpStatusCode.Created);
+		response.Headers.Location = new Uri(Url.Link("DefaultApi", new { controller = "carrinho", id = carrinho.Id }));
+		return response;
+	}
+	catch (Exception)
+	{
+		HttpResponseMessage response = Request.CreateResponse(HttpStatusCode.InternalServerError);
+		return response;
+	}
+
+}
+
+
+--------------TIPOS DE REQUISIÇÕES
+* Idempotência      -> não importa a quantidade de vezes que seja chamada, não afetará o resultado (GET)(DELETE)(PUT)
+* Não Idempotência  -> importa quantas vezes é chamado, pois pode causar um efeito colateral conforme a quantidade de vez que e executado (POST)
+
+
+
+DEETE: Sim, ele é, imagine que removemos o produto 15:
+
+'DELETE' /api/carrinho/1/produto/15 Se eu executar 1 ou mais vezes a mesma requisição, não haverá um efeito colateral fora a remoção do produto 15 que estava no meu carrinho.
+
+Claro, se alguém adicionar um novo produto 15 entre uma requisição e outra, surgirá um novo efeito. Portanto devo tomar cuidado: se quero o DELETE realmente idempotente 
+(seguindo a especificação), ao invés de receber o ID do produto eu deveria receber um ID único que representasse o ID do produto dentro deste carrinho de maneira única. 
+Esses cuidados são importantes se pretendemos usar o HTTP como protocolo para nossa aplicação. Um exemplo seria a URI da seguinte maneira:
+
+/carrinho/ID_DO_CARRINHO/produto/ID_DO_PRODUTO_E_CONTADOR_UNICO No nosso caso, o DELETE que remove por id será suficiente, portanto não alteraremos nossa URI.
+
+
+O verbo PUT é idempotente. Toda vez que executado, o resultado é o mesmo: a alteração do recurso (seja ele qual for) anterior pelo recurso atual, através da representação passada pelo cliente.
+
+
+
+
+
+--------------Capítulo 10 - Interface uniforme
+
+Os verbos que aprendemos durante as aulas deste curso não são os únicos. Existem outros como, por exemplo, o PATCH (atualiza partes de um recurso), o 
+TRACE, o CONNECT e o HEAD (pegam informações do cabeçalho na requisição). Todos eles retornam como resposta o Status Code, que é uma informação padronizada 
+a qual todos entendem. Os verbos funcionam da mesma forma, são universais.
+
+Esta é a vantagem de utilizarmos a Interface Uniforme. Para o desenvolvedor é muito bom, pois conseguimos entender onde estão as informações, como interagir e 
+interpretar as respostas.
+
+
+A vantagem de usar uma interface uniforme é esse padrão que faz com que todas as aplicações, todos os programas utilizando essa API, tenham em comum essas 
+características, todas elas sabem entender o que uma requisição HTTP está fazendo.
